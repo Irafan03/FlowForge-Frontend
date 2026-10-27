@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useAuth } from '../../app/AuthContext';
 import { useToast } from '../../app/ToastContext';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { ErrorState, LoadingState } from '../../components/ui/RequestState';
 import { credentialService } from '../../services/credentialService';
-import { getApiBaseUrl } from '../../services/apiClient';
 import { googleIntegrationService } from '../../services/googleIntegrationService';
 import type { Credential } from '../../types/api';
 
@@ -29,6 +28,8 @@ export function CredentialsPage() {
   const [error, setError] = useState('');
   const [formError, setFormError] = useState('');
   const [type, setType] = useState<CredentialFormType>('telegram_bot');
+  const googlePopup = useRef<Window | null>(null);
+  const googleCallbackOrigin = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     if (!session) return;
@@ -47,9 +48,14 @@ export function CredentialsPage() {
 
   useEffect(() => {
     if (!session) return;
-    const apiOrigin = new URL(getApiBaseUrl()).origin;
     function handleGooglePopupMessage(event: MessageEvent) {
-      if (event.origin !== apiOrigin || event.data?.type !== 'flowforge:google-oauth') return;
+      if (
+        event.source !== googlePopup.current
+        || event.origin !== googleCallbackOrigin.current
+        || event.data?.type !== 'flowforge:google-oauth'
+      ) return;
+      googlePopup.current = null;
+      googleCallbackOrigin.current = null;
       if (event.data.status === 'connected') {
         showToast('Compte Google connecté.', 'success');
         void load();
@@ -103,6 +109,10 @@ export function CredentialsPage() {
     setGoogleConnecting(true);
     try {
       const { authorization_url } = await googleIntegrationService.getAuthorizationUrl(session.accessToken);
+      const redirectUri = new URL(authorization_url).searchParams.get('redirect_uri');
+      if (!redirectUri) throw new Error('URL de retour Google manquante.');
+      googleCallbackOrigin.current = new URL(redirectUri).origin;
+      googlePopup.current = popup;
       popup.location.href = authorization_url;
     } catch (connectError) {
       popup.close();

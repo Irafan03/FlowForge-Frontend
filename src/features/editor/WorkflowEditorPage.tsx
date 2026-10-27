@@ -13,7 +13,7 @@ import { useToast } from '../../app/ToastContext';
 import { credentialService } from '../../services/credentialService';
 import { executionService } from '../../services/executionService';
 import { workflowService } from '../../services/workflowService';
-import type { Credential, Workflow } from '../../types/api';
+import type { Credential, Execution, Workflow } from '../../types/api';
 import { NodeConfigPanel } from './NodeConfigPanel';
 import { NodePalette } from './NodePalette';
 import { WorkflowCanvas, wouldCreateCycle } from './WorkflowCanvas';
@@ -71,6 +71,11 @@ function WorkflowEditor() {
   const [saving, setSaving] = useState(false);
   const [activating, setActivating] = useState(false);
   const [executing, setExecuting] = useState(false);
+  const [showTestData, setShowTestData] = useState(false);
+  const [testTriggerType, setTestTriggerType] = useState<'gmail_trigger' | 'telegram_trigger' | null>(null);
+  const [testEmail, setTestEmail] = useState({ from: 'demo@example.com', subject: 'Exemple de message', body_text: 'Bonjour, ceci est un e-mail de test.' });
+  const [testTelegramMessage, setTestTelegramMessage] = useState({ chat_id: '', text: 'Bonjour, peux-tu m’aider ?', username: 'demo_user' });
+  const [selectedRunNodeId, setSelectedRunNodeId] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
   const [configValid, setConfigValid] = useState(true);
   const { session } = useAuth();
@@ -248,18 +253,57 @@ function WorkflowEditor() {
     }
   }
 
-  async function runWorkflow() {
+  function applyExecution(execution: Execution) {
+    const byNode = new Map(execution.node_executions.map((item) => [item.node_id, item]));
+    setNodes((current) => current.map((node) => {
+      const result = byNode.get(node.id);
+      return { ...node, data: { ...node.data, runStatus: result?.status ?? (['queued', 'running'].includes(execution.status) ? 'pending' : undefined), runError: result?.error ?? null, runOutput: result?.output ?? null } };
+    }));
+    const failedNode = execution.node_executions.find((item) => item.status === 'failed');
+    const lastNode = execution.node_executions[execution.node_executions.length - 1];
+    setSelectedRunNodeId(failedNode?.node_id ?? lastNode?.node_id ?? null);
+  }
+
+  async function runWorkflow(inputData: Record<string, unknown> = {}) {
     if (!session || !workflow || !workflow.is_active || dirty) return;
     setExecuting(true);
+    setShowTestData(false);
+    setNodes((current) => current.map((node) => ({ ...node, data: { ...node.data, runStatus: 'pending', runError: null, runOutput: null } })));
     try {
-      const queued = await executionService.trigger(session.accessToken, workflow.id, {});
-      showToast(`Exécution mise en file (${queued.execution_id.slice(0, 8)}).`, 'success');
-      navigate(`/history/${queued.execution_id}`);
+      const queued = await executionService.trigger(session.accessToken, workflow.id, inputData);
+      let latest: Execution | null = null;
+      for (let attempt = 0; attempt < 120; attempt += 1) {
+        latest = await executionService.get(session.accessToken, queued.execution_id);
+        applyExecution(latest);
+        if (!['queued', 'running'].includes(latest.status)) break;
+        await new Promise((resolve) => window.setTimeout(resolve, 500));
+      }
+      if (latest?.status === 'success') showToast('Workflow ex?cut? avec succ?s.', 'success');
+      else if (latest?.status === 'failed') showToast(latest.error ?? 'Le workflow a ?chou?. Cliquez sur le n?ud en erreur pour voir le d?tail.', 'error');
+      else showToast(`Ex?cution ${queued.execution_id.slice(0, 8)} toujours en cours.`, 'info');
     } catch (executionError) {
-      showToast(executionError instanceof Error ? executionError.message : 'Impossible de démarrer l’exécution.', 'error');
+      showToast(executionError instanceof Error ? executionError.message : 'Impossible de d?marrer l?ex?cution.', 'error');
     } finally {
       setExecuting(false);
     }
+  }
+
+  function requestRun() {
+    if (nodes.some((node) => node.data.workflowType === 'gmail_trigger')) {
+      setTestTriggerType('gmail_trigger');
+      setShowTestData(true);
+      return;
+    }
+    const telegramTrigger = nodes.find((node) => node.data.workflowType === 'telegram_trigger');
+    if (telegramTrigger) {
+      const allowedChatIds = telegramTrigger.data.config.allowed_chat_ids;
+      const chatId = Array.isArray(allowedChatIds) ? String(allowedChatIds[0] ?? '') : '';
+      setTestTelegramMessage((current) => ({ ...current, chat_id: chatId || current.chat_id }));
+      setTestTriggerType('telegram_trigger');
+      setShowTestData(true);
+      return;
+    }
+    void runWorkflow();
   }
 
   return (
@@ -275,7 +319,7 @@ function WorkflowEditor() {
         <div className="editor-toolbar-actions">
           {workflow && <button className="button button-secondary" type="button" disabled={activating || dirty || loadingWorkflow} onClick={() => void toggleActivation()}>{activating ? '…' : workflow.is_active ? 'Désactiver' : 'Activer'}</button>}
           <button className="button button-secondary editor-save-button" type="button" disabled={saving || loadingWorkflow || !configValid || validationErrors.length > 0 || !workflowName.trim()} onClick={() => void saveWorkflow()}>{saving ? 'Enregistrement…' : 'Enregistrer'}</button>
-          <button className="button button-primary" type="button" disabled={executing || !configValid || !workflow?.is_active || dirty || validationErrors.length > 0} onClick={() => void runWorkflow()} title={!workflow ? 'Enregistrez le workflow avant de le tester' : !workflow.is_active ? 'Activez le workflow avant de le tester' : dirty ? 'Enregistrez les modifications avant de tester' : undefined}><span>▷</span> {executing ? 'Démarrage…' : 'Tester'}</button>
+          <button className="button button-primary" type="button" disabled={executing || !configValid || !workflow?.is_active || dirty || validationErrors.length > 0} onClick={requestRun} title={!workflow ? 'Enregistrez le workflow avant de le tester' : !workflow.is_active ? 'Activez le workflow avant de le tester' : dirty ? 'Enregistrez les modifications avant de tester' : undefined}><span>▷</span> {executing ? 'Exécution…' : 'Tester'}</button>
         </div>
       </div>
 
@@ -298,14 +342,29 @@ function WorkflowEditor() {
             onNodesChange={(changes) => { if (changes.some((change) => ['position', 'add', 'remove', 'replace'].includes(change.type))) setDirty(true); onNodesChange(changes); }}
             onEdgesChange={(changes) => { if (changes.some((change) => ['add', 'remove', 'replace'].includes(change.type))) setDirty(true); onEdgesChange(changes); }}
             onConnect={handleConnect}
-            onSelectNode={(node) => setSelectedNodeId(node?.id ?? null)}
+            onSelectNode={(node) => { setSelectedNodeId(node?.id ?? null); if (node?.data.runStatus) setSelectedRunNodeId(node.id); }}
             onDropNode={addNode}
             onInvalidConnection={() => setConnectionNotice('Cette connexion créerait un cycle et ne peut pas être ajoutée.')}
           />
+          {selectedRunNodeId && nodes.find((node) => node.id === selectedRunNodeId)?.data.runStatus && <section className="execution-inspector"><header><strong>Données d’exécution</strong><button type="button" onClick={() => setSelectedRunNodeId(null)} aria-label="Fermer les données">×</button></header>{(() => { const node = nodes.find((item) => item.id === selectedRunNodeId); return node ? <><p>{node.data.label} · {node.data.runStatus}</p>{node.data.runError && <div className="execution-inspector-error">{node.data.runError}</div>}<pre>{JSON.stringify(node.data.runOutput, null, 2) ?? 'Aucune sortie'}</pre></> : null; })()}</section>}
           <details className="graph-inspector"><summary>Contrat JSON local <span>nodes / edges</span></summary><pre>{JSON.stringify(graph, null, 2)}</pre></details>
         </section>
-        <NodeConfigPanel node={selectedNode} credentials={credentials} webhookUrl={webhookUrl} webhookUrlLoading={webhookUrlLoading} webhookUrlError={webhookUrlError} onCopyWebhookUrl={() => void copyWebhookUrl()} onUpdate={updateNode} onValidityChange={handleConfigValidity} onClose={() => { setSelectedNodeId(null); setConfigValid(true); }} onDelete={deleteNode} />
+        <NodeConfigPanel node={selectedNode} availableNodes={selectedNode ? nodes.filter((candidate) => edges.some((edge) => edge.source === candidate.id && edge.target === selectedNode.id)) : []} credentials={credentials} webhookUrl={webhookUrl} webhookUrlLoading={webhookUrlLoading} webhookUrlError={webhookUrlError} onCopyWebhookUrl={() => void copyWebhookUrl()} onUpdate={updateNode} onValidityChange={handleConfigValidity} onClose={() => { setSelectedNodeId(null); setConfigValid(true); }} onDelete={deleteNode} />
       </div>
+      {showTestData && <div className="test-data-backdrop" role="presentation"><section className="test-data-dialog" role="dialog" aria-modal="true" aria-labelledby="test-data-title">
+        <h2 id="test-data-title">{testTriggerType === 'gmail_trigger' ? 'Tester avec un e-mail exemple' : 'Tester avec un message Telegram exemple'}</h2>
+        <p>Ces donn?es servent uniquement ? cette ex?cution manuelle.</p>
+        {testTriggerType === 'gmail_trigger' ? <>
+          <label className="config-field"><span>Exp?diteur</span><input value={testEmail.from} onChange={(event) => setTestEmail((current) => ({ ...current, from: event.target.value }))} /></label>
+          <label className="config-field"><span>Objet</span><input value={testEmail.subject} onChange={(event) => setTestEmail((current) => ({ ...current, subject: event.target.value }))} /></label>
+          <label className="config-field"><span>Corps du message</span><textarea value={testEmail.body_text} onChange={(event) => setTestEmail((current) => ({ ...current, body_text: event.target.value }))} /></label>
+          <div className="test-data-actions"><button className="button button-secondary" type="button" onClick={() => setShowTestData(false)}>Annuler</button><button className="button button-primary" type="button" disabled={executing} onClick={() => void runWorkflow({ ...testEmail, received_at: new Date().toISOString() })}>{executing ? 'Ex?cution?' : 'Lancer le test'}</button></div>
+        </> : <>
+          <label className="config-field"><span>Chat ID</span><input value={testTelegramMessage.chat_id} onChange={(event) => setTestTelegramMessage((current) => ({ ...current, chat_id: event.target.value }))} /></label>
+          <label className="config-field"><span>Message entrant</span><textarea value={testTelegramMessage.text} onChange={(event) => setTestTelegramMessage((current) => ({ ...current, text: event.target.value }))} /></label>
+          <div className="test-data-actions"><button className="button button-secondary" type="button" onClick={() => setShowTestData(false)}>Annuler</button><button className="button button-primary" type="button" disabled={executing} onClick={() => void runWorkflow({ chat_id: testTelegramMessage.chat_id, text: testTelegramMessage.text, from_user: { id: testTelegramMessage.chat_id, username: testTelegramMessage.username }, received_at: new Date().toISOString() })}>{executing ? 'Ex?cution?' : 'Lancer le test'}</button></div>
+        </>}
+      </section></div>}
       <div className="editor-statusbar"><span><i className="statusbar-dot" /> {workflow ? dirty ? 'Modifications non enregistrées' : 'Enregistré sur le serveur' : 'Brouillon non enregistré'}</span><span>Les validations côté serveur restent la référence</span></div>
     </div>
   );

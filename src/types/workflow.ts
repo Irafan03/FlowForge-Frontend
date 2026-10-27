@@ -12,6 +12,8 @@ export const WORKFLOW_NODE_TYPES = [
   'gmail_send',
   'telegram_send',
   'ml_prediction',
+  'ai_agent',
+  'google_sheets_append',
 ] as const;
 
 export type WorkflowNodeType = (typeof WORKFLOW_NODE_TYPES)[number];
@@ -42,6 +44,9 @@ export type WorkflowNodeData = {
   workflowType: WorkflowNodeType;
   label: string;
   config: JsonObject;
+  runStatus?: 'pending' | 'running' | 'success' | 'failed' | 'skipped';
+  runError?: string | null;
+  runOutput?: JsonObject | null;
 };
 
 export type WorkflowFlowNode = Node<WorkflowNodeData, 'workflowNode'>;

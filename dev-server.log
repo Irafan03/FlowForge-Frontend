@@ -1,0 +1,26 @@
+
+> flowforge-frontend@0.1.0 dev
+> vite --host 0.0.0.0
+
+
+  VITE v8.3.4  ready in 10897 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: http://100.89.160.204:5173/  Wi-Fi
+  ➜  Network: http://172.21.176.1:5173/    vEthernet (WSL (Hyp…
+  ➜  press h + enter to show help
+22 h 56 min 32 s [vite] (client) [console.warn] React Flow: It seems like you are hiding the attribution. Please only do this when you are subscribed to React Flow Pro: https://reactflow.dev/remove-attr
+You can ignore this warning if you are subscribed.
+23 h 02 min 01 s [vite] (client) hmr update /src/styles.css, /src/features/editor/NodeConfigPanel.tsx
+23 h 07 min 07 s [vite] (client) [console.warn] React Flow: It seems like you are hiding the attribution. Please only do this when you are subscribed to React Flow Pro: https://reactflow.dev/remove-attr
+You can ignore this warning if you are subscribed.
+23 h 13 min 55 s [vite] (client) [console.warn] React Flow: It seems like you are hiding the attribution. Please only do this when you are subscribed to React Flow Pro: https://reactflow.dev/remove-attr
+You can ignore this warning if you are subscribed.
+23 h 30 min 00 s [vite] (client) [console.warn] React Flow: It seems like you are hiding the attribution. Please only do this when you are subscribed to React Flow Pro: https://reactflow.dev/remove-attr
+You can ignore this warning if you are subscribed.
+00 h 11 min 26 s [vite] (client) [console.warn] React Flow: It seems like you are hiding the attribution. Please only do this when you are subscribed to React Flow Pro: https://reactflow.dev/remove-attr
+You can ignore this warning if you are subscribed.
+01 h 12 min 45 s [vite] (client) [console.warn] React Flow: It seems like you are hiding the attribution. Please only do this when you are subscribed to React Flow Pro: https://reactflow.dev/remove-attr
+You can ignore this warning if you are subscribed.
+01 h 38 min 04 s [vite] (client) hmr update /src/features/editor/WorkflowEditorPage.tsx, /src/styles.css
+01 h 38 min 12 s [vite] (client) hmr update /src/features/editor/WorkflowEditorPage.tsx, /src/styles.css

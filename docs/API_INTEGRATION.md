@@ -27,9 +27,17 @@ Tous les chemins applicatifs sont précédés de `/api/v1`. L'API renvoie des en
 
 La création envoie `{name, graph}` avec `graph.nodes` et `graph.edges`. Chaque node sérialisé contient `id`, `type`, `name`, `config`, `position: {x,y}`. Une edge contient `id`, `source`, `target`, `source_handle`, `target_handle`. Les handles React Flow camelCase sont convertis vers le snake_case backend. L'API de mise à jour reçoit le même graphe et le nom.
 
-Types node autorisés : `manual_trigger`, `webhook_trigger`, `schedule_trigger`, `gmail_trigger`, `telegram_trigger`, `set_data`, `if_condition`, `http_request`, `gmail_send`, `telegram_send`, `ml_prediction`.
+Types node autorisés : `manual_trigger`, `webhook_trigger`, `schedule_trigger`, `gmail_trigger`, `telegram_trigger`, `set_data`, `if_condition`, `http_request`, `gmail_send`, `telegram_send`, `ml_prediction`, `ai_agent`, `google_sheets_append`.
 
 L'exécution manuelle reçoit `{"input_data": {}}` et répond `202` avec `execution_id`, `status`, `workflow_id`, `created_at`. Le backend vérifié exige l'activation avant déclenchement manuel; le bouton Tester est désactivé si le workflow n'est pas actif ou si ses modifications ne sont pas sauvegardées.
+
+## Nœud AI Agent (Ollama)
+
+Le nœud d’action `ai_agent` envoie son `prompt` (et éventuellement `system_prompt`) au backend. La clé Ollama reste dans le `.env` du backend; elle ne figure ni dans le graphe ni dans le navigateur. Voir `../FlowForge-Backend/docs/OLLAMA_AGENT.md` pour la configuration.
+
+## Nœud Google Sheets
+
+`google_sheets_append` ajoute une ligne à une feuille avec le credential Google sélectionné. Après l’ajout du scope Sheets, l’utilisateur doit reconnecter Google pour accorder cette permission. Voir `../FlowForge-Backend/docs/GOOGLE_SHEETS.md`.
 
 ## Authentification et credentials
 

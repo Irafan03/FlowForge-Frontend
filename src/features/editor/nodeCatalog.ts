@@ -11,6 +11,8 @@ export type NodeCatalogItem = {
 };
 
 export const NODE_CATALOG: NodeCatalogItem[] = [
+  { type: 'google_sheets_append', label: 'Google Sheets · Ajouter une ligne', description: 'Ajouter les valeurs dans une feuille Google', icon: '▤', group: 'Action', color: 'green', requiredConfig: ['credential_id', 'spreadsheet_id', 'range', 'values'] },
+  { type: 'ai_agent', label: 'AI Agent (Ollama)', description: 'Générer une réponse avec le modèle configuré', icon: '✧', group: 'Action', color: 'violet', requiredConfig: ['prompt'] },
   { type: 'manual_trigger', label: 'Manual Trigger', description: 'Démarrer à la demande', icon: '▶', group: 'Trigger', color: 'violet', requiredConfig: [] },
   { type: 'webhook_trigger', label: 'Webhook Trigger', description: 'Recevoir un appel HTTP', icon: '⌁', group: 'Trigger', color: 'blue', requiredConfig: [] },
   { type: 'gmail_trigger', label: 'Gmail Trigger', description: 'Surveiller une boîte Gmail', icon: '✉', group: 'Trigger', color: 'red', requiredConfig: ['credential_id'] },

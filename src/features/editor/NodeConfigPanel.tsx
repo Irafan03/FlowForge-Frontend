@@ -6,6 +6,7 @@ import { findInlineSecret, isValidScheduleCron, isValidScheduleTimezone } from '
 
 type NodeConfigPanelProps = {
   node: WorkflowFlowNode | null;
+  availableNodes: WorkflowFlowNode[];
   onUpdate: (nodeId: string, update: { label: string; config: Record<string, unknown> }) => void;
   onClose: () => void;
   onDelete: (nodeId: string) => void;
@@ -17,7 +18,7 @@ type NodeConfigPanelProps = {
   onValidityChange: (valid: boolean) => void;
 };
 
-export function NodeConfigPanel({ node, onUpdate, onClose, onDelete, credentials, webhookUrl, webhookUrlLoading, webhookUrlError, onCopyWebhookUrl, onValidityChange }: NodeConfigPanelProps) {
+export function NodeConfigPanel({ node, availableNodes, onUpdate, onClose, onDelete, credentials, webhookUrl, webhookUrlLoading, webhookUrlError, onCopyWebhookUrl, onValidityChange }: NodeConfigPanelProps) {
   const [label, setLabel] = useState('');
   const [configText, setConfigText] = useState('{}');
   const [jsonError, setJsonError] = useState('');
@@ -44,7 +45,7 @@ export function NodeConfigPanel({ node, onUpdate, onClose, onDelete, credentials
   const workflowType = activeNode.data.workflowType as WorkflowNodeType;
   const catalogItem = getNodeCatalogItem(workflowType);
   const isHttpRequest = workflowType === 'http_request';
-  const expectedCredentialType = workflowType.startsWith('gmail') ? 'oauth2_google' : workflowType.startsWith('telegram') ? 'telegram_bot' : null;
+  const expectedCredentialType = workflowType.startsWith('gmail') || workflowType === 'google_sheets_append' ? 'oauth2_google' : workflowType.startsWith('telegram') ? 'telegram_bot' : null;
   const availableCredentials = isHttpRequest
     ? credentials.filter((credential) => credential.type === 'api_key' || credential.type === 'http_header')
     : expectedCredentialType ? credentials.filter((credential) => credential.type === expectedCredentialType) : credentials;
@@ -127,12 +128,24 @@ export function NodeConfigPanel({ node, onUpdate, onClose, onDelete, credentials
     onUpdate(activeNode.id, { label, config });
   }
 
+  function setConfigValue(key: string, value: unknown) {
+    const config = { ...activeNode.data.config, [key]: value };
+    setConfigText(JSON.stringify(config, null, 2));
+    setJsonError('');
+    onUpdate(activeNode.id, { label, config });
+  }
+
+  const isGmail = workflowType === 'gmail_trigger';
+  const isAgent = workflowType === 'ai_agent';
+  const isSheets = workflowType === 'google_sheets_append';
+  const hasStructuredForm = isGmail || isAgent || isSheets;
+
   return (
     <aside className="node-config-panel">
       <div className="config-panel-header"><div><p className="config-eyebrow">NODE SETTINGS</p><h2>Configuration</h2></div><button className="config-close" onClick={onClose} aria-label="Fermer la configuration">×</button></div>
       <div className="config-node-identity"><span className={`palette-node-icon ${catalogItem.color}`}>{catalogItem.icon}</span><span><strong>{catalogItem.label}</strong><small>{catalogItem.group}</small></span></div>
       <label className="config-field"><span>Nom du nœud</span><input value={label} onChange={(event) => handleLabelChange(event.target.value)} maxLength={255} /></label>
-      {(catalogItem.requiredConfig.includes('credential_id') || isHttpRequest) && <label className="config-field"><span>{isHttpRequest ? 'Credential HTTP (facultatif)' : 'Credential lie'}</span><select aria-label={isHttpRequest ? 'Credential HTTP' : 'Credential lie'} value={String(activeNode.data.config.credential_id ?? '')} onChange={(event) => handleCredentialChange(event.target.value)}><option value="">{isHttpRequest ? 'Aucun credential' : 'Choisir un credential'}</option>{availableCredentials.map((credential) => <option value={credential.id} key={credential.id}>{credential.name}{isHttpRequest ? ` (${credential.type === 'api_key' ? 'API Key' : 'HTTP Header'})` : ''}</option>)}</select>{availableCredentials.length === 0 && <small className="config-field-hint">{isHttpRequest ? 'Ajoutez un credential API Key ou HTTP Header dans Credentials.' : expectedCredentialType === 'oauth2_google' ? 'Aucun credential Google. Le flux OAuth reste a integrer.' : 'Aucun credential Telegram. Ajoutez-en dans Credentials.'}</small>}</label>}
+      {(catalogItem.requiredConfig.includes('credential_id') || isHttpRequest) && <label className="config-field"><span>{isHttpRequest ? 'Credential HTTP (facultatif)' : isSheets ? 'Compte Google OAuth (Gmail et Sheets)' : 'Credential lie'}</span><select aria-label={isHttpRequest ? 'Credential HTTP' : isSheets ? 'Compte Google OAuth (Gmail et Sheets)' : 'Credential lie'} value={String(activeNode.data.config.credential_id ?? '')} onChange={(event) => handleCredentialChange(event.target.value)}><option value="">{isHttpRequest ? 'Aucun credential' : 'Choisir un credential'}</option>{availableCredentials.map((credential) => <option value={credential.id} key={credential.id}>{credential.name}{isHttpRequest ? ` (${credential.type === 'api_key' ? 'API Key' : 'HTTP Header'})` : isSheets ? ' (OAuth Google)' : ''}</option>)}</select>{availableCredentials.length === 0 && <small className="config-field-hint">{isHttpRequest ? 'Ajoutez un credential API Key ou HTTP Header dans Credentials.' : expectedCredentialType === 'oauth2_google' ? 'Connectez un compte Google OAuth depuis Credentials. Une clé API Google ne suffit pas pour ajouter une ligne.' : 'Aucun credential Telegram. Ajoutez-en dans Credentials.'}</small>}{isSheets && availableCredentials.length > 0 && <small className="config-field-hint">Une clé API Google ne peut pas autoriser l’ajout de lignes. Le compte OAuth sélectionné doit avoir accès à la feuille.</small>}</label>}
       {isHttpRequest && selectedCredential?.type === 'api_key' && <><label className="config-field"><span>Header de la cle API</span><input aria-label="Header de la cle API" value={String(activeNode.data.config.api_key_header ?? 'Authorization')} onChange={(event) => handleApiKeyHeaderChange(event.target.value)} /></label><small className="config-field-hint">La valeur secrete est envoyee avec le prefixe configure (Bearer par defaut).</small></>}
       <div className="config-section-title"><span>Paramètres</span><span className="config-format">{isSchedule ? 'Schedule' : isWebhook ? 'Webhook' : 'JSON'}</span></div>
       {isSchedule ? (
@@ -151,6 +164,48 @@ export function NodeConfigPanel({ node, onUpdate, onClose, onDelete, credentials
           </div>
           {webhookUrlError ? <small className="config-error" role="alert">{webhookUrlError}</small> : <small className="config-field-hint">{webhookUrl ? 'Cette URL contient le token du webhook. Gardez-la privée.' : 'Enregistrez le workflow pour générer son URL.'}</small>}
         </div>
+      ) : hasStructuredForm ? (
+        <>
+          {isGmail && <>
+            <label className="config-field"><span>Recherche Gmail</span><input value={String(activeNode.data.config.filter ?? '')} onChange={(event) => setConfigValue('filter', event.target.value)} placeholder="from:exemple@domaine.com subject:Facture" /></label>
+            <label className="config-field"><span>Intervalle de vérification (secondes)</span><input type="number" min="30" value={String(activeNode.data.config.polling_interval_seconds ?? 60)} onChange={(event) => setConfigValue('polling_interval_seconds', Number(event.target.value))} /></label>
+            <small className="config-field-hint">Le déclencheur réel lit les nouveaux e-mails Gmail. Le bouton Tester utilise un e-mail simulé.</small>
+          </>}
+          {isAgent && <>
+            <label className="config-field"><span>Prompt utilisateur</span><textarea value={String(activeNode.data.config.prompt ?? '')} onChange={(event) => setConfigValue('prompt', event.target.value)} placeholder={availableNodes[0] ? `Analyse cet e-mail : {{${availableNodes[0].id}.body_text}}` : 'Écrivez une instruction pour l’agent IA.'} /></label>
+            <small className="config-field-hint">Cliquez sur une donnée entrante pour l’insérer dans le prompt :</small>
+            <div className="expression-pickers">{availableNodes.flatMap((source) => {
+              const fields = source.data.workflowType === 'gmail_trigger' ? ['from', 'subject', 'body_text', 'received_at'] : source.data.workflowType === 'ai_agent' ? ['response', 'data'] : ['output'];
+              return fields.map((field) => <button type="button" key={`${source.id}.${field}`} title={`Insérer {{${source.id}.${field}}}`} onClick={() => setConfigValue('prompt', `${String(activeNode.data.config.prompt ?? '')}{{${source.id}.${field}}}`)}>{source.data.label}.{field}</button>);
+            })}</div>
+            <label className="config-field"><span>Instructions système (facultatif)</span><textarea value={String(activeNode.data.config.system_prompt ?? '')} onChange={(event) => setConfigValue('system_prompt', event.target.value)} placeholder="Tu es un assistant qui extrait les informations utiles." /></label>
+            <label className="config-field"><span>Modèle</span><input value={String(activeNode.data.config.model ?? '')} onChange={(event) => setConfigValue('model', event.target.value)} placeholder="Modèle défini dans le backend" /></label>
+            <div className="config-field"><span>Format de sortie</span><select value={String(activeNode.data.config.output_mode ?? 'text')} onChange={(event) => setConfigValue('output_mode', event.target.value)}><option value="text">Texte</option><option value="json">JSON structuré</option></select></div>
+            <label className="config-field"><span>Température (0–2)</span><input type="number" min="0" max="2" step="0.1" value={String(activeNode.data.config.temperature ?? 0.2)} onChange={(event) => setConfigValue('temperature', Number(event.target.value))} /></label>
+            <label className="config-field"><span>Limite de réponse (tokens)</span><input type="number" min="1" max="32768" value={String(activeNode.data.config.max_tokens ?? 2048)} onChange={(event) => setConfigValue('max_tokens', Number(event.target.value))} /></label>
+            {activeNode.data.config.output_mode === 'json' && <label className="config-field"><span>Champs JSON attendus (un par ligne)</span><textarea value={Array.isArray(activeNode.data.config.output_fields) ? activeNode.data.config.output_fields.map(String).join('\n') : ''} onChange={(event) => setConfigValue('output_fields', event.target.value.split('\n').map((field) => field.trim()).filter(Boolean))} placeholder={'expediteur\nsujet\nresume'} /></label>}
+          </>}
+          {isSheets && <>
+            <label className="config-field"><span>ID du spreadsheet</span><input value={String(activeNode.data.config.spreadsheet_id ?? '')} onChange={(event) => setConfigValue('spreadsheet_id', event.target.value)} placeholder="ID dans l’URL Google Sheets" /></label>
+            <label className="config-field"><span>Plage A1</span><input value={String(activeNode.data.config.range ?? 'Sheet1!A:Z')} onChange={(event) => setConfigValue('range', event.target.value)} placeholder="Feuille1!A:Z" /></label>
+            <label className="config-field"><span>Valeurs de la ligne (une colonne par ligne)</span><textarea value={Array.isArray(activeNode.data.config.values) ? activeNode.data.config.values.map((value) => String(value ?? '')).join('\n') : ''} onChange={(event) => setConfigValue('values', event.target.value.split('\n'))} placeholder="{{ID_DU_NOEUD.data.champ}}" /></label>
+            <small className="config-field-hint">Expressions entrantes :</small>
+            <div className="expression-pickers">{availableNodes.flatMap((source) => {
+              const sourceFields = source.data.workflowType === 'ai_agent'
+                ? source.data.config.output_mode === 'json' && Array.isArray(source.data.config.output_fields)
+                  ? source.data.config.output_fields.map((field) => `data.${String(field)}`)
+                  : ['response']
+                : source.data.workflowType === 'gmail_trigger'
+                  ? ['received_at', 'from', 'subject', 'body_text']
+                  : ['output'];
+              return sourceFields.map((field) => {
+                const expression = `{{${source.id}.${field}}}`;
+                return <button type="button" key={`${source.id}.${field}`} title={`Ajouter ${expression} comme valeur de colonne`} onClick={() => setConfigValue('values', [...(Array.isArray(activeNode.data.config.values) ? activeNode.data.config.values : []), expression])}>{source.data.label}.{field}</button>;
+              });
+            })}</div>
+          </>}
+          <details className="config-advanced"><summary>Configuration JSON avancée</summary><label className="config-field config-json-field"><span>Configuration complète</span><textarea spellCheck={false} value={configText} onChange={(event) => handleConfigChange(event.target.value)} aria-label="Configuration JSON avancée du nœud" /></label>{jsonError && <p className="config-error" role="alert">{jsonError}</p>}</details>
+        </>
       ) : (
         <>
           <label className="config-field config-json-field"><span>Configuration du nœud</span><textarea spellCheck={false} value={configText} onChange={(event) => handleConfigChange(event.target.value)} aria-label="Configuration JSON du nœud" /></label>
